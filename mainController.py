@@ -1,11 +1,11 @@
 from mainView import MainFrame
 from threading import Thread
 from wx.lib.pubsub import pub as Publisher
-from mp3_tagger import MP3File, VERSION_1, VERSION_2, VERSION_BOTH
 
 import wx
 import youtube_dl
 import re
+import taglib
 
 
 class MyLogger(object):
@@ -59,9 +59,13 @@ class YoutubeDownloader(Thread):
 	def run(self):
 		while True:
 			if not self.func: continue
-			returns = self.func()
-			wx.CallAfter(Publisher.sendMessage, "update", data={'callafter':self.callafter, 'returns': returns})
-			self.func = self.callafter = None
+			try:
+				returns = self.func()
+				wx.CallAfter(Publisher.sendMessage, "update", data={'callafter':self.callafter, 'returns': returns})
+			except Exception as e:
+				Publisher.sendMessage("error", data=e)
+			finally:
+				self.func = self.callafter = None
 
 	def _download(self):
 		if not self.videoURL: return
@@ -91,13 +95,14 @@ class Controller:
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
         )
 	TITLE_REGEX = re.compile(
-		r'^(?P<artist>[0-9A-Za-z\'\"\ ]+)?\-?(?P<title>.+)'
+		r'^(?P<artist>[0-9A-Za-z\.\'\"\ ]+)?\-?(?P<title>.+)'
 		)
 
 	def __init__(self):
 		self.mainWindow = MainFrame(None)
 		self.downloader = YoutubeDownloader(self)
 		Publisher.subscribe(self._update_after_thread, "update")
+		Publisher.subscribe(self._handle_error, "error")
 
 		# bind events
 		self.mainWindow.Bind(wx.EVT_BUTTON, self.onURLClick, self.mainWindow.btnGetInfo)
@@ -106,6 +111,7 @@ class Controller:
 		# setup view
 		self.mainWindow.barStatus.SetStatusText('Ready')
 		self.mainWindow.btnDownload.Disable()
+		self.mainWindow.SetWindowStyle(self.mainWindow.GetWindowStyle() ^ wx.RESIZE_BORDER) # disable resize
 
 	def show(self):
 		self.mainWindow.Show()
@@ -126,7 +132,7 @@ class Controller:
 		self.mainWindow.barStatus.SetStatusText('Ready')
 		if not info_dict:return
 		artist, title = self._get_title_info(info_dict.get('title'))
-		self.downloader.opts.update({'outtmpl': '{}-{}.%(ext)s'.format(artist.strip(), title.strip())})
+		self.downloader.opts.update({'outtmpl': '{} - {}.%(ext)s'.format(artist.strip(), title.strip())})
 		self.mainWindow.txtArtist.SetValue(artist.strip())
 		self.mainWindow.txtTitle.SetValue(title.strip())
 
@@ -139,6 +145,9 @@ class Controller:
 		# change mouse cursor
 		self.mainWindow.SetCursor(wx.Cursor(wx.CURSOR_WAIT))
 
+		artist = self.mainWindow.txtArtist.GetValue()
+		title = self.mainWindow.txtTitle.GetValue()
+		self.downloader.opts.update({'outtmpl': '{} - {}.%(ext)s'.format(artist.strip(), title.strip())})
 		self.mainWindow.barStatus.SetStatusText('Downloading...')
 		self.mainWindow.btnDownload.Disable()
 		self.mainWindow.btnGetInfo.Disable()
@@ -151,20 +160,22 @@ class Controller:
 		# set id3 tags
 		artist = self.mainWindow.txtArtist.GetValue()
 		title = self.mainWindow.txtTitle.GetValue()
-		mp3_file = MP3File('%s-%s.mp3' % (artist, title))
-		mp3_file.artist = artist
-		mp3_file.url = self.mainWindow.txtURL.GetValue()
-		mp3_file.song = title
+		mp3_file = taglib.File('%s - %s.mp3' % (artist, title))
+		mp3_file.tags['ARTIST'] = [artist]
+		mp3_file.tags['TITLE'] = title
 		mp3_file.save()
 
-		# set cursor back
-		self.mainWindow.SetCursor(wx.Cursor())
+		self.reset_window()
 
+	def reset_window(self):
+		# set view back to original state
+		self.mainWindow.SetCursor(wx.Cursor())
 		self.mainWindow.barStatus.SetStatusText('Ready')
 		self.mainWindow.btnGetInfo.Enable()
 		self.mainWindow.txtArtist.Enable()
 		self.mainWindow.txtTitle.Enable()
 		self.mainWindow.txtURL.Enable()
+		self.mainWindow.btnDownload.Disable()
 
 	def update_prog_bar(self, value):
 		if isinstance(value, str):
@@ -193,3 +204,8 @@ class Controller:
 			self.update_prog_bar(data)
 		else:
 			data['callafter'](data.get('returns'))
+
+	def _handle_error(self, data):
+		msg_box = wx.MessageDialog(self.mainWindow, str(data), "Error handling youtube_dl", style=wx.OK|wx.CENTRE|wx.ICON_ERROR)
+		msg_box.ShowModal()
+		self.reset_window()
