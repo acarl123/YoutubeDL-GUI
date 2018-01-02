@@ -95,7 +95,7 @@ class Controller:
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
         )
 	TITLE_REGEX = re.compile(
-		r'^(?P<artist>[0-9A-Za-z\.\'\"\ ]+)?\-?(?P<title>.+)'
+		r'^(?P<artist>[0-9A-Za-z\&\.\'\"\ ]+)?\-?(?P<title>.+)'
 		)
 
 	def __init__(self):
