@@ -1,0 +1,3 @@
+pytaglib
+wxPython
+youtube_dl
