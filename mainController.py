@@ -3,9 +3,14 @@ from threading import Thread
 from wx.lib.pubsub import pub as Publisher
 
 import wx
+import os
 import youtube_dl
 import re
+import ast
 import taglib
+import configparser
+
+from prefsController import PrefsController
 
 
 class MyLogger(object):
@@ -107,24 +112,57 @@ class Controller:
 		# bind events
 		self.mainWindow.Bind(wx.EVT_BUTTON, self.onURLClick, self.mainWindow.btnGetInfo)
 		self.mainWindow.Bind(wx.EVT_BUTTON, self.onDownloadClick, self.mainWindow.btnDownload)
+		self.mainWindow.Bind(wx.EVT_MENU, self.onExit, self.mainWindow.menuQuit)
+		self.mainWindow.Bind(wx.EVT_MENU, self.onPrefs, self.mainWindow.menuPrefs)
 
 		# setup view
 		self.mainWindow.barStatus.SetStatusText('Ready')
 		self.mainWindow.btnDownload.Disable()
 		self.mainWindow.SetWindowStyle(self.mainWindow.GetWindowStyle() ^ wx.RESIZE_BORDER) # disable resize
 
+		# load confs
+		self.prefs = {
+			'makedirs': False,
+			'autodirfield': '',
+			'defaultdir': os.path.dirname(__file__)
+		}
+		self.loadConfig()
+
 	def show(self):
 		self.mainWindow.Show()
+
+	def onExit(self, event):
+		self.mainWindow.Destroy()
+		exit(0)
+
+	def loadConfig(self):
+		config = configparser.ConfigParser()
+		if os.path.isfile('config.ini'):
+			config.read('config.ini')
+			self.prefs = dict(config['DEFAULT'])
+			# need to convert bools, need a better way to do this
+			self.prefs['makedirs'] = config.getboolean('DEFAULT', 'makedirs')
+
+	def onPrefs(self, event):
+		prefsController = PrefsController(self)
+		if prefsController.showModal() == wx.ID_OK:
+			self.prefs = prefsController.prefs
+			print(self.prefs)
+			config = configparser.ConfigParser(strict=False)
+			config['DEFAULT'] = self.prefs
+			with open('config.ini', 'w') as configFile:
+				config.write(configFile)
 
 	def onURLClick(self, event):
 		# change mouse cursor
 		self.mainWindow.SetCursor(wx.Cursor(wx.CURSOR_WAIT))
 
-		self.mainWindow.barStatus.SetStatusText('Pulling Info...')
 		self.mainWindow.txtArtist.Clear()
 		self.mainWindow.txtTitle.Clear()
 		videoURL = self._validate_url(self.mainWindow.txtURL.GetLineText(0))
 		if not videoURL: return
+		self.disable_window()
+		self.mainWindow.barStatus.SetStatusText('Pulling Info...')
 		self.downloader.videoURL = videoURL
 		self.downloader.get_video_info(callafter=self.finish_info_display)
 
@@ -137,7 +175,7 @@ class Controller:
 		self.mainWindow.txtTitle.SetValue(title.strip())
 
 		# set cursor back
-		self.mainWindow.SetCursor(wx.Cursor())
+		self.reset_window()
 
 		self.mainWindow.btnDownload.Enable()
 
@@ -149,32 +187,47 @@ class Controller:
 		title = self.mainWindow.txtTitle.GetValue()
 		self.downloader.opts.update({'outtmpl': '{} - {}.%(ext)s'.format(artist.strip(), title.strip())})
 		self.mainWindow.barStatus.SetStatusText('Downloading...')
-		self.mainWindow.btnDownload.Disable()
-		self.mainWindow.btnGetInfo.Disable()
-		self.mainWindow.txtArtist.Disable()
-		self.mainWindow.txtTitle.Disable()
-		self.mainWindow.txtURL.Disable()
+		self.disable_window
 		self.downloader.download(callafter=self.finish_download)
 
 	def finish_download(self, *args):
 		# set id3 tags
-		artist = self.mainWindow.txtArtist.GetValue()
-		title = self.mainWindow.txtTitle.GetValue()
+		artist = self.mainWindow.txtArtist.GetValue().strip()
+		title = self.mainWindow.txtTitle.GetValue().strip()
+		genre = self.mainWindow.txtGenre.GetValue().strip()
 		mp3_file = taglib.File('%s - %s.mp3' % (artist, title))
 		mp3_file.tags['ARTIST'] = [artist]
 		mp3_file.tags['TITLE'] = title
+		mp3_file.tags['GENRE'] = genre
 		mp3_file.save()
 
+		# move to new location
+		if self.prefs.get('makedirs'):
+			# need a more pythonic way to do this
+			if self.prefs.get('autodirfield') == 'GENRE':
+				subfolder_path = genre
+			elif self.prefs.get('autodirfield') == 'ARTIST':
+				subfolder_path = artist
+			newDir = os.path.join(self.prefs.get('defaultdir'), subfolder_path)
+			os.makedirs(newDir, exist_ok=True)
+		else:
+			newDir = self.prefs.get('defaultdir')
+
+		filename = '{} - {}.mp3'.format(artist, title)
+		os.rename(filename, os.path.join(newDir, filename))
+
 		self.reset_window()
+
+	def disable_window(self):
+		for widget in self.mainWindow.GetChildren():
+			widget.Disable()
 
 	def reset_window(self):
 		# set view back to original state
 		self.mainWindow.SetCursor(wx.Cursor())
 		self.mainWindow.barStatus.SetStatusText('Ready')
-		self.mainWindow.btnGetInfo.Enable()
-		self.mainWindow.txtArtist.Enable()
-		self.mainWindow.txtTitle.Enable()
-		self.mainWindow.txtURL.Enable()
+		for widget in self.mainWindow.GetChildren():
+			widget.Enable()
 		self.mainWindow.btnDownload.Disable()
 
 	def update_prog_bar(self, value):
