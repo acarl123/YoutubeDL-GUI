@@ -100,7 +100,7 @@ class Controller:
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
         )
 	TITLE_REGEX = re.compile(
-		r'^(?P<artist>[0-9A-Za-z\&\.\'\"\ ]+)?\-?(?P<title>.+)'
+		r'^(?P<artist>[0-9A-Za-z\[\]\&\.\'\"\ ]+)?\-?(?P<title>.+)'
 		)
 
 	def __init__(self):
@@ -195,11 +195,17 @@ class Controller:
 		artist = self.mainWindow.txtArtist.GetValue().strip()
 		title = self.mainWindow.txtTitle.GetValue().strip()
 		genre = self.mainWindow.txtGenre.GetValue().strip()
-		mp3_file = taglib.File('%s - %s.mp3' % (artist, title))
+		try:
+			mp3_file = taglib.File('%s - %s.mp3' % (artist, title))
+		except OSError:
+			self._handle_error('cannot open file for editing, try removing special characters?')
+			self.reset_window()
+			return
 		mp3_file.tags['ARTIST'] = [artist]
 		mp3_file.tags['TITLE'] = title
 		mp3_file.tags['GENRE'] = genre
 		mp3_file.save()
+		mp3_file.close()
 
 		# move to new location
 		if self.prefs.get('makedirs'):
@@ -214,7 +220,10 @@ class Controller:
 			newDir = self.prefs.get('defaultdir')
 
 		filename = '{} - {}.mp3'.format(artist, title)
-		os.rename(filename, os.path.join(newDir, filename))
+		try:
+			os.rename(filename, os.path.join(newDir, filename))
+		except Exception as e:
+			self._handle_error(e)
 
 		self.reset_window()
 

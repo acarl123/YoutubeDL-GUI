@@ -1,5 +1,6 @@
 import wx
 from mainController import Controller
+from wx.lib.pubsub import setuparg1
 
 
 def main():
