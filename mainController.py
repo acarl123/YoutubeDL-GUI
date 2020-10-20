@@ -170,9 +170,17 @@ class Controller:
 		self.mainWindow.barStatus.SetStatusText('Ready')
 		if not info_dict:return
 		artist, title = self._get_title_info(info_dict.get('title'))
-		self.downloader.opts.update({'outtmpl': '{} - {}.%(ext)s'.format(artist.strip(), title.strip())})
-		self.mainWindow.txtArtist.SetValue(artist.strip())
-		self.mainWindow.txtTitle.SetValue(title.strip())
+		if artist: 
+			artist = artist.strip()
+		else:
+			artist = ''
+		if title: 
+			title = title.strip()
+		else:
+			title = ''
+		self.downloader.opts.update({'outtmpl': '{} - {}.%(ext)s'.format(artist, title)})
+		self.mainWindow.txtArtist.SetValue(artist)
+		self.mainWindow.txtTitle.SetValue(title)
 
 		# set cursor back
 		self.reset_window()
@@ -197,15 +205,15 @@ class Controller:
 		genre = self.mainWindow.txtGenre.GetValue().strip()
 		try:
 			mp3_file = taglib.File('%s - %s.mp3' % (artist, title))
+			mp3_file.tags['ARTIST'] = [artist]
+			mp3_file.tags['TITLE'] = title
+			mp3_file.tags['GENRE'] = genre
+			mp3_file.save()
+			mp3_file.close()
 		except OSError:
-			self._handle_error('cannot open file for editing, try removing special characters?')
-			self.reset_window()
-			return
-		mp3_file.tags['ARTIST'] = [artist]
-		mp3_file.tags['TITLE'] = title
-		mp3_file.tags['GENRE'] = genre
-		mp3_file.save()
-		mp3_file.close()
+			self._handle_error('cannot open file for tag editing (possibly due to special characters).\nNot populating ID3 tags...')
+			# self.reset_window()
+
 
 		# move to new location
 		if self.prefs.get('makedirs'):
