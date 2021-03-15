@@ -52,7 +52,7 @@ class MainFrame ( wx.Frame ):
 		self.txtTitle = wx.TextCtrl( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.txtTitle.SetMinSize( wx.Size( 400,-1 ) )
 		
-		fgSizer4.Add( self.txtTitle, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND, 5 )
+		fgSizer4.Add( self.txtTitle, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
 		
 		self.m_staticText3 = wx.StaticText( self, wx.ID_ANY, u"Artist", wx.DefaultPosition, wx.DefaultSize, 0 )
 		self.m_staticText3.Wrap( -1 )
