@@ -1,93 +1,15 @@
 from mainView import MainFrame
-from threading import Thread
 from pubsub import pub as Publisher
 
 import wx
 import os
-import yt_dlp
 import re
-import ast
 import taglib
 import configparser
 
 from prefsController import PrefsController
-
-
-class MyLogger(object):
-    def debug(self, msg):
-        pass
-
-    def warning(self, msg):
-        pass
-
-    def error(self, msg):
-        print(msg)
-
-class YoutubeDownloader(Thread):
-    def __init__(self, parent=None):
-        Thread.__init__(self)
-        self.opts = {
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'logger': MyLogger(),
-                'progress_hooks': [self._hook],
-            }
-        self.videoURL = ''
-        self.parent = parent
-        self.func = None
-        self.callafter = None
-        self.daemon = True
-        self.start()
-
-    def _hook(self, d):
-        if d['status'] == 'finished':
-            Publisher.sendMessage("update", data='converting')
-        elif d['status'] == 'downloading':
-            if not d.get('total_bytes'):
-                Publisher.sendMessage("update", data=101)
-            else:
-                Publisher.sendMessage("update", data=int((d.get('downloaded_bytes') / d.get('total_bytes')) * 100))
-
-    def download(self, callafter=None):
-        self.func = self._download
-        self.callafter = callafter
-
-    def get_video_info(self, callafter=None):
-        self.func = self._get_video_info
-        self.callafter = callafter
-
-    # ===================== Separate Thread Below ==================== #
-    def run(self):
-        while True:
-            if not self.func: continue
-            try:
-                returns = self.func()
-                wx.CallAfter(Publisher.sendMessage, "update", data={'callafter':self.callafter, 'returns': returns})
-            except Exception as e:
-                Publisher.sendMessage("error", data=e)
-            finally:
-                self.func = self.callafter = None
-
-    def _download(self):
-        if not self.videoURL: return
-        opts = self.opts
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([self.videoURL])
-
-    def _get_video_info(self):
-        if not self.videoURL: return
-        opts = {
-            'simulate': True,
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info_dict = ydl.extract_info(self.videoURL, download=False)
-
-        return info_dict
-    # ===================== Separate Thread Above ==================== #
+from bulkController import BulkController
+from worker import YoutubeDownloader
 
 
 class Controller:
@@ -114,6 +36,7 @@ class Controller:
         self.mainWindow.Bind(wx.EVT_BUTTON, self.onDownloadClick, self.mainWindow.btnDownload)
         self.mainWindow.Bind(wx.EVT_MENU, self.onExit, self.mainWindow.menuQuit)
         self.mainWindow.Bind(wx.EVT_MENU, self.onPrefs, self.mainWindow.menuPrefs)
+        self.mainWindow.Bind(wx.EVT_MENU, self.onBulk, self.mainWindow.menuBulk)
         self.mainWindow.Bind(wx.EVT_BUTTON, self.onSwap, self.mainWindow.btnSwap)
 
         # setup view
@@ -122,6 +45,7 @@ class Controller:
         self.mainWindow.SetWindowStyle(self.mainWindow.GetWindowStyle() ^ wx.RESIZE_BORDER) # disable resize
 
         # load confs
+        self.bulk_queue = []
         self.prefs = {
             'makedirs': False,
             'autodirfield': '',
@@ -151,6 +75,25 @@ class Controller:
         subfolders = [f.name for f in os.scandir(self.prefs.get('defaultdir', os.getcwd())) if f.is_dir()]
         self.mainWindow.cmbGenre.AppendItems(sorted(subfolders))
 
+    def onBulk(self, event):
+        # load bulk download modal
+        bulkController = BulkController(self)
+        if bulkController.showModel() == wx.ID_OK:
+            # download all these bois
+            self.bulk_queue = bulkController.download_queue
+            self.do_bulk_download()
+    
+    def do_bulk_download(self):
+        track = self.bulk_queue.pop(0)
+        self.reset_window()
+        self.mainWindow.txtArtist.SetValue(track['artist'])
+        self.mainWindow.txtTitle.SetValue(track['title'])
+        self.mainWindow.cmbGenre.SetValue(track['genre'])
+        self.mainWindow.txtURL.SetValue(track['url'])
+        self.downloader.videoURL = track['url']
+        # call the internal download func
+        self.onDownloadClick()
+            
     def onPrefs(self, event):
         prefsController = PrefsController(self)
         if prefsController.showModal() == wx.ID_OK:
@@ -202,7 +145,7 @@ class Controller:
 
         self.mainWindow.btnDownload.Enable()
 
-    def onDownloadClick(self, event):
+    def onDownloadClick(self, event=None):
         # change mouse cursor
         self.mainWindow.SetCursor(wx.Cursor(wx.CURSOR_WAIT))
 
@@ -210,7 +153,7 @@ class Controller:
         title = self.mainWindow.txtTitle.GetValue()
         self.downloader.opts.update({'outtmpl': '{} - {}.%(ext)s'.format(artist.strip(), title.strip())})
         self.mainWindow.barStatus.SetStatusText('Downloading...')
-        self.disable_window
+        self.disable_window()
         self.downloader.download(callafter=self.finish_download)
 
     def finish_download(self, *args):
@@ -244,6 +187,9 @@ class Controller:
             self._handle_error(e)
 
         self.reset_window()
+        # continue with the bulk downloads if there's anything left
+        if self.bulk_queue:
+            self.do_bulk_download()
 
     def disable_window(self):
         for widget in self.mainWindow.GetChildren():

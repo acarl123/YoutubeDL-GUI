@@ -17,7 +17,7 @@ import wx.xrc
 class MainFrame ( wx.Frame ):
     
     def __init__( self, parent ):
-        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = wx.EmptyString, pos = wx.DefaultPosition, size = wx.Size( 510,301 ), style = wx.CAPTION|wx.CLOSE_BOX|wx.MAXIMIZE_BOX|wx.MINIMIZE_BOX|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
+        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = wx.EmptyString, pos = wx.DefaultPosition, size = wx.Size( 504,301 ), style = wx.CAPTION|wx.CLOSE_BOX|wx.MAXIMIZE_BOX|wx.MINIMIZE_BOX|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
         
         self.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
         
@@ -55,8 +55,13 @@ class MainFrame ( wx.Frame ):
         fgSizer4.Add( self.txtTitle, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
         
         self.btnSwap = wx.BitmapButton( self, wx.ID_ANY, wx.Bitmap( u"assets/icons8-swap-24.png", wx.BITMAP_TYPE_ANY ), wx.DefaultPosition, wx.DefaultSize, wx.BU_AUTODRAW )
-        self.btnSwap.SetToolTipString( u"Swap artist and title" )
-    
+        
+        # self.btnSwap.SetBitmapDisabled( wx.Bitmap( u"assets/icons8-swap-24.png", wx.BITMAP_TYPE_ANY ) )
+        # self.btnSwap.SetBitmapSelected( wx.Bitmap( u"assets/icons8-swap-24.png", wx.BITMAP_TYPE_ANY ) )
+        # self.btnSwap.SetBitmapFocus( wx.Bitmap( u"assets/icons8-swap-24.png", wx.BITMAP_TYPE_ANY ) )
+        # self.btnSwap.SetBitmapHover( wx.Bitmap( u"assets/icons8-swap-24.png", wx.BITMAP_TYPE_ANY ) )
+        self.btnSwap.SetToolTip( u"Swap artist and title" )
+        
         fgSizer4.Add( self.btnSwap, 0, wx.ALL, 5 )
         
         self.m_staticText3 = wx.StaticText( self, wx.ID_ANY, u"Artist", wx.DefaultPosition, wx.DefaultSize, 0 )
@@ -94,16 +99,18 @@ class MainFrame ( wx.Frame ):
         self.barStatus = self.CreateStatusBar( 1, wx.STB_SIZEGRIP, wx.ID_ANY )
         self.m_menubar1 = wx.MenuBar( 0 )
         self.m_menu1 = wx.Menu()
+        self.menuBulk = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Bulk Download from Exportify...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu1.Append( self.menuBulk )
+        
+        self.menuPrefs = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Preferences...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu1.Append( self.menuPrefs )
+        
+        self.m_menu1.AppendSeparator()
+        
         self.menuQuit = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"&Quit", wx.EmptyString, wx.ITEM_NORMAL )
         self.m_menu1.Append( self.menuQuit )
         
         self.m_menubar1.Append( self.m_menu1, u"&File" ) 
-        
-        self.m_menu2 = wx.Menu()
-        self.menuPrefs = wx.MenuItem( self.m_menu2, wx.ID_ANY, u"Preferences...", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menu2.Append( self.menuPrefs )
-        
-        self.m_menubar1.Append( self.m_menu2, u"&Edit" ) 
         
         self.SetMenuBar( self.m_menubar1 )
         
