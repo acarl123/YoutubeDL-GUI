@@ -24,8 +24,14 @@ class BulkController:
         self.mainWindow.Bind(wx.EVT_BUTTON, self.onFinish, self.mainWindow.btnFinish)
         self.mainWindow.Bind(wx.EVT_BUTTON, self.onCancel, self.mainWindow.btnCancel)
         self.mainWindow.Bind(wx.EVT_CLOSE, self.onClose, self.mainWindow)
+        self.mainWindow.Bind(wx.EVT_BUTTON, self.onLoadAll, self.mainWindow.btnLoadAll)
+        
+        # set display
+        self.mainWindow.btnLoadAll.Disable()
 
         self.download_queue = []
+        self.total_cnt = 0
+        self.queue_cnt = 0
         self.cur_url = ''
         self.futures = []
         self.executor = ThreadPoolExecutor(max_workers=self.WORKER_LIMIT)
@@ -34,7 +40,7 @@ class BulkController:
         # stops tasks in the queue
         return self.mainWindow.ShowModal()
 
-    def onClose(self):
+    def onClose(self, *args, **kwargs):
         self.executor.shutdown()
     
     def onLoad(self, event):
@@ -47,7 +53,50 @@ class BulkController:
             self._parse_csv(csv_file)
             
             # call to update ui
+            self.update_count()
             self.display_result()
+            self.mainWindow.btnLoadAll.Enable()
+            self.mainWindow.btnLoad.Disable()
+    
+    def onLoadAll(self, event):
+        self.disable_window()
+        # add 1st one already loaded
+        self.download_queue.append({
+            'artist': self.mainWindow.txtArtist.GetValue().strip(),
+            'title': self.mainWindow.txtTitle.GetValue().strip(),
+            'genre': self.mainWindow.txtGenre.GetValue().strip(),
+            'url': self.cur_url
+        })
+        self.queue_cnt += 1
+        self.mainWindow.lstQueue.AppendItems([f'{self.mainWindow.txtTitle.GetValue().strip()} - {self.mainWindow.txtArtist.GetValue().strip()}'])
+        self.mainWindow.lstQueue.Refresh()
+        
+        while self.futures:
+            self.update_count()
+            res = self.futures.pop(0).result()
+            if res.get('errors'):
+                print(res.get('errors'))
+                continue
+            
+            self.cur_url = res.get('url')
+            self.download_queue.append({
+            'artist': res.get('artist').strip(),
+            'title': res.get('title').strip(),
+            'genre': self.mainWindow.txtGenre.GetValue().strip(),
+            'url': res.get('url')
+            })
+            self.queue_cnt += 1
+            self.mainWindow.lstQueue.AppendItems([f"{res.get('title').strip()} - {res.get('artist').strip()}"])
+            self.mainWindow.lstQueue.Refresh()
+            self.mainWindow.Layout()
+        
+        self.enable_window()
+        self.mainWindow.btnAdd.Disable()
+        self.mainWindow.btnSkip.Disable()
+        self.mainWindow.btnLoadAll.Disable()
+    
+    def update_count(self):
+        self.mainWindow.lblCnt.SetLabelText(f'{self.queue_cnt}/{self.total_cnt}')
     
     def onFinish(self, event):
         self.mainWindow.EndModal(wx.ID_OK)
@@ -72,6 +121,7 @@ class BulkController:
             'genre': self.mainWindow.txtGenre.GetValue().strip(),
             'url': self.cur_url
         })
+        self.queue_cnt += 1
         self.mainWindow.lstQueue.AppendItems([f'{self.mainWindow.txtTitle.GetValue().strip()} - {self.mainWindow.txtArtist.GetValue().strip()}'])
         self.mainWindow.lstQueue.Refresh()
         
@@ -79,6 +129,7 @@ class BulkController:
         if not self.futures:
             self.mainWindow.btnAdd.Disable()
             self.mainWindow.btnSkip.Disable()
+            self.mainWindow.btnLoadAll.Disable()
         else:
             self.display_result()
         
@@ -86,6 +137,7 @@ class BulkController:
         with open(csv_file, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
+                self.total_cnt += 1
                 self.futures.append(self.executor.submit(self._do_search, search_terms={
                     'artist': row.get('Artist Name(s)'),
                     'title': row.get('Track Name')
@@ -93,19 +145,31 @@ class BulkController:
 
     def disable_window(self):
         self.mainWindow.SetCursor(wx.Cursor(wx.CURSOR_WAIT))
-        for widget in self.mainWindow.GetChildren():
-            widget.Disable()
+        self.mainWindow.btnAdd.Disable()
+        self.mainWindow.btnSkip.Disable()
+        self.mainWindow.btnLoadAll.Disable()
+        self.mainWindow.Layout()
     
     def enable_window(self):
         # set view back to original state
         self.mainWindow.SetCursor(wx.Cursor())
-        for widget in self.mainWindow.GetChildren():
-            widget.Enable()
+        self.mainWindow.btnAdd.Enable()
+        self.mainWindow.btnSkip.Enable()
+        self.mainWindow.btnLoadAll.Enable()
+        self.mainWindow.Layout()
     
     def display_result(self):
+        self.update_count()
         self.disable_window()  
         res = self.futures.pop(0).result()
         self.enable_window()
+        
+        # check if no errors
+        # TODO: show errors in dialog
+        if res.get('errors'):
+            print(res.get('errors'))
+            self.display_result()
+            return
         
         # set up view
         self.mainWindow.txtArtist.SetValue(res.get('artist'))
@@ -117,7 +181,9 @@ class BulkController:
             image = wx.Image(io.BytesIO(res.get('thumbnail')))
             image = image.Scale(self.mainWindow.mThumbnail.Size[0], self.mainWindow.mThumbnail.Size[1], wx.IMAGE_QUALITY_HIGH)
             self.mainWindow.mThumbnail.SetBitmap(wx.BitmapBundle(image))
-        self.mainWindow.lblVideo.SetLabelText(f"{res['title']} - {res['channel']}")
+            self.mainWindow.mThumbnail.Refresh()
+        self.mainWindow.lblVideo.SetLabelText(f"{res.get('title')} - {res.get('channel')}")
+        self.mainWindow.lblVideo.Refresh()
         self.cur_url = res.get('url')
             
     def _do_search(self, search_terms):
@@ -128,9 +194,17 @@ class BulkController:
         output_dict['title'] = title
         
         with yt_dlp.YoutubeDL() as ydl:
-            results = ydl.extract_info(f'ytsearch:{title} - {artist}', download=False)['entries'][0:5]
-            # TODO: able to page through multiple search results
-            result = results[0]
+            try:
+                results = ydl.extract_info(f'ytsearch:{title} - {artist}', download=False)['entries'][0:5]
+                # TODO: able to page through multiple search results
+                if not results:
+                    output_dict['error'] = 'no results returned'
+                    return output_dict
+                result = results[0]
+            except Exception as e:
+                output_dict['error'] = e
+                return output_dict
+            
             thumbnail = [thumb.get('url') for thumb in result.get('thumbnails') if int(thumb.get('height', 0)) >= 100 and thumb.get('url')[-3:] == 'jpg']
             if thumbnail:
                 data = requests.get(thumbnail[0])

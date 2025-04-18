@@ -81,6 +81,9 @@ class bulkDialog ( wx.Dialog ):
         self.lstQueue = wx.ListBox( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, lstQueueChoices, 0 )
         bSizer8.Add( self.lstQueue, 1, wx.ALL|wx.EXPAND, 5 )
         
+        self.lblCnt = wx.StaticText( self, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.lblCnt.Wrap( -1 )
+        bSizer8.Add( self.lblCnt, 0, wx.ALL|wx.ALIGN_CENTER_HORIZONTAL, 5 )
         
         bSizer5.Add( bSizer8, 1, wx.EXPAND, 5 )
         
@@ -112,6 +115,8 @@ class bulkDialog ( wx.Dialog ):
         self.btnLoad = wx.Button( self, wx.ID_ANY, u"Load CSV", wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer7.Add( self.btnLoad, 0, wx.ALL, 5 )
         
+        self.btnLoadAll = wx.Button( self, wx.ID_ANY, u"Add All to Queue", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer7.Add( self.btnLoadAll, 0, wx.ALL, 5 )
         
         bSizer7.Add( ( 0, 0), 1, wx.EXPAND, 5 )
         

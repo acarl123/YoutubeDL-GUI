@@ -172,7 +172,6 @@ class Controller:
             self._handle_error('cannot open file for tag editing (possibly due to special characters).\nNot populating ID3 tags...')
             # self.reset_window()
 
-
         # move to new location
         if self.prefs.get('makedirs'):
             newDir = os.path.join(self.prefs.get('defaultdir'), genre)
