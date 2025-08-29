@@ -27,6 +27,7 @@ class YoutubeDownloader(Thread):
                 }],
                 'logger': MyLogger(),
                 'progress_hooks': [self._hook],
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
         self.videoURL = ''
         self.parent = parent
@@ -69,7 +70,12 @@ class YoutubeDownloader(Thread):
         if not self.videoURL: return
         opts = self.opts
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([self.videoURL])
+            info = ydl.extract_info(self.videoURL, download=True)
+            # Copy info dict and change video extension to audio extension
+            info_with_audio_extension = dict(info)
+            info_with_audio_extension['ext'] = 'mp3'
+            # Return filename with the correct extension
+            return ydl.prepare_filename(info_with_audio_extension)
 
     def _get_video_info(self):
         if not self.videoURL: return
