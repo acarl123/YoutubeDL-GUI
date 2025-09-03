@@ -134,7 +134,7 @@ class BulkController:
             self.display_result()
         
     def _parse_csv(self, csv_file):
-        with open(csv_file, 'r') as csvfile:
+        with open(csv_file, 'r', encoding='UTF-8') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 self.total_cnt += 1
